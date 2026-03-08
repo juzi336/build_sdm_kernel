@@ -16,8 +16,7 @@ jobs:
       run: |
         sudo apt-get update
         sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip
-        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
-
+        
     - name: 检出本地代码 (获取补丁)
       uses: actions/checkout@v4
 
@@ -31,6 +30,7 @@ jobs:
     - name: 下载 Clang
       if: steps.cache-clang.outputs.cache-hit != 'true'
       run: |
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
         cd $GITHUB_WORKSPACE/kernel_workspace
         mkdir -p clang-aosp
         wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android16-qpr2-release/clang-${{ env.CLANG_VERSION }}.tar.gz
