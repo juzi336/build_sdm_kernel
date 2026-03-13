@@ -1,4 +1,4 @@
-name: Build Avium Kernel
+name: Build Avium Kernel test
 
 on:
   workflow_dispatch:
