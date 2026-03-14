@@ -1,9 +1,10 @@
-name: Build Sony SM8350 Kernel (Minimal)
+name: Build Sony SM8350 Kernel
 
 on:
   workflow_dispatch:
 
 env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
   CLANG_VERSION: r563880c
   KERNEL_SRC: https://github.com/LineageOS/android_kernel_sony_sm8350
   KERNEL_BRANCH: lineage-23.2
@@ -16,17 +17,24 @@ jobs:
     - name: 环境准备
       run: |
         sudo apt-get update
-        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3
-        mkdir -p $GITHUB_WORKSPACE/kernel_workspace
+        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip
+        mkdir -p $GITHUB_WORKSPACE/kernel_workspace/clang-aosp
 
-    - name: 下载 Clang 工具链
+    - name: 检查 Clang 缓存
+      id: cache-clang
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/kernel_workspace/clang-aosp
+        key: clang-${{ env.CLANG_VERSION }}
+
+    - name: 下载 Clang (无缓存时)
+      if: steps.cache-clang.outputs.cache-hit != 'true'
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
-        mkdir -p clang-aosp
         wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android16-qpr2-release/clang-${{ env.CLANG_VERSION }}.tar.gz
         tar -C clang-aosp -xf clang-${{ env.CLANG_VERSION }}.tar.gz
 
-    - name: 检出内核源码
+    - name: 检出源码
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.KERNEL_BRANCH }} android-kernel
@@ -35,24 +43,23 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin:$PATH"
+        MAKE_ARGS="ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- KCFLAGS=-w"
         
-        MAKE_ARGS="ARCH=arm64 \
-                   LLVM=1 \
-                   LLVM_IAS=1 \
-                   CC=clang \
-                   LD=ld.lld \
-                   CLANG_TRIPLE=aarch64-linux-gnu- \
-                   CROSS_COMPILE=aarch64-linux-gnu- \
-                   CROSS_COMPILE_ARM32=arm-linux-gnueabi- \
-                   KCFLAGS=-w"
-        
-        # 配置内核
         make O=out $MAKE_ARGS ${{ env.KERNEL_DEFCONFIG }}
-        # 开始编译
         make -j$(nproc --all) O=out $MAKE_ARGS
 
-    - name: 上传构建产物 (Image)
+    - name: 打包 AnyKernel3
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace
+        git clone --depth=1 https://github.com/osm0sis/AnyKernel3 AnyKernel3
+        sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+        sed -i 's!BLOCK=.*!BLOCK=auto;!g' AnyKernel3/anykernel.sh
+        sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
+        cp android-kernel/out/arch/arm64/boot/Image AnyKernel3/
+        cd AnyKernel3 && zip -r ../Sony-SM8350-Kernel.zip ./*
+
+    - name: 上传刷机包
       uses: actions/upload-artifact@v4
       with:
-        name: Kernel-Image
-        path: kernel_workspace/android-kernel/out/arch/arm64/boot/Image
+        name: Sony-Kernel-ZIP
+        path: kernel_workspace/Sony-SM8350-Kernel.zip
