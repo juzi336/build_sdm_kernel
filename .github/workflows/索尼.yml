@@ -38,10 +38,17 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.KERNEL_BRANCH }} android-kernel
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        curl -LSs "https://raw.githubusercontent.com/rsuntk/KernelSU/main/kernel/setup.sh" | bash -s main
+        echo "CONFIG_KSU_MANUAL_HOOK=y" >> arch/arm64/configs/pdx214_defconfig
+        bash $GITHUB_WORKSPACE/patches/kernel-4.19_5.4-patch.sh
+        sed -i 's/ -dirty//g' scripts/setlocalversion
 
     - name: 编译内核
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        export KBUILD_BUILD_HOST=coolapk
+        export KBUILD_BUILD_USER=$(echo ${{ github.actor }} | tr A-Z a-z)
         export PATH="$GITHUB_WORKSPACE/kernel_workspace/clang-aosp/bin:$PATH"
         MAKE_ARGS="ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- KCFLAGS=-w"
         
