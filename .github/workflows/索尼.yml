@@ -19,6 +19,9 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip
         mkdir -p $GITHUB_WORKSPACE/kernel_workspace/clang-aosp
+        
+    - name: 检出本地代码 (获取补丁)
+      uses: actions/checkout@v4 
 
     - name: 检查 Clang 缓存
       id: cache-clang
