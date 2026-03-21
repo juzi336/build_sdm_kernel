@@ -15,6 +15,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+    - name: Setup SWAP
+        uses: pierotofy/set-swap-space@master
+        with:
+          swap-size-gb: 16
     - name: 准备环境
       run: |
         sudo apt-get update
