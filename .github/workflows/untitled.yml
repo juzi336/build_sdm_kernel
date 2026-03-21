@@ -43,6 +43,9 @@ jobs:
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.BRANCH }} sm8450
         git clone --depth=1 ${{ env.MODULES_SRC }} -b ${{ env.BRANCH }} sm8450-modules
         git clone --depth=1 ${{ env.DT_SRC }} -b ${{ env.BRANCH }} sm8450-devicetrees
+        cd sm8450
+        curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+        
 
     - name: 编译内核
       run: |
