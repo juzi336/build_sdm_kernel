@@ -56,6 +56,7 @@ jobs:
         
         cd $GITHUB_WORKSPACE/sm8450/KernelSU
         patch -p1 < 10_enable_susfs_for_ksu.patch
+        echo "kernelsu_patch完成"
         
         cd $GITHUB_WORKSPACE/sm8450
         patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
