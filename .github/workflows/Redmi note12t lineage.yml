@@ -50,7 +50,7 @@ jobs:
         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
         
         cp $GITHUB_WORKSPACE/patch/kernel_patches/KernelSU/10_enable_susfs_for_ksu.patch $GITHUB_WORKSPACE/sm8450/KernelSU/
-        cp $GITHUB_WORKSPACE/patch/kernel_patches/50_add_susfs_in_kernel-<kernel_version>.patch $GITHUB_WORKSPACE/sm8450/
+        cp $GITHUB_WORKSPACE/patch/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch $GITHUB_WORKSPACE/sm8450/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/fs/* $GITHUB_WORKSPACE/sm8450/fs/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/include/linux/* $GITHUB_WORKSPACE/sm8450/include/linux/
         
@@ -58,7 +58,7 @@ jobs:
         patch -p1 < 10_enable_susfs_for_ksu.patch
         
         cd $GITHUB_WORKSPACE/sm8450
-        patch -p1 < 50_add_susfs_in_kernel.patch
+        patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
 
     - name: 编译内核
       run: |
