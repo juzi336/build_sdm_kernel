@@ -19,6 +19,7 @@ jobs:
       uses: pierotofy/set-swap-space@master
       with:
           swap-size-gb: 16
+          
     - name: 准备环境
       run: |
         sudo apt-get update
@@ -69,7 +70,23 @@ jobs:
         make O=out $MAKE_ARGS ${{ env.KERNEL_DEFCONFIG }}
         make -j$(nproc --all) O=out $MAKE_ARGS
 
-    - name: 上传产物
+    - name: 打包 AnyKernel3
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone --depth=1 https://github.com/osm0sis/AnyKernel3
+        sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+        sed -i 's!BLOCK=.*!BLOCK=auto;!g' AnyKernel3/anykernel.sh
+        sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
+        cp sm8450/out/arch/arm64/boot/Image AnyKernel3/
+        cd AnyKernel3 && zip -r ../Xiaomi-Marble-Kernel.zip ./*
+
+    - name: 上传刷机包 (AnyKernel3)
+      uses: actions/upload-artifact@v4
+      with:
+        name: Xiaomi-Marble-Kernel-ZIP
+        path: ${{ github.workspace }}/Xiaomi-Marble-Kernel.zip
+
+    - name: 上传内核镜像
       uses: actions/upload-artifact@v4
       with:
         name: Xiaomi-Marble-Image
