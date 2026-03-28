@@ -48,14 +48,17 @@ jobs:
         git clone --depth=1 ${{ env.DT_SRC }} -b ${{ env.BRANCH }} sm8450-devicetrees
         echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
         echo "CONFIG_KSU_SUSFS=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
+        echo "设置内核完成"
         
         cd $GITHUB_WORKSPACE/sm8450
         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
         sed -i 's/ -dirty//g' scripts/setlocalversion
+        echo "设置ksu完成"
         
         cp $GITHUB_WORKSPACE/patch/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch $GITHUB_WORKSPACE/sm8450/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/fs/* $GITHUB_WORKSPACE/sm8450/fs/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/include/linux/* $GITHUB_WORKSPACE/sm8450/include/linux/
+        echo "cp完成"
         
         cd $GITHUB_WORKSPACE/sm8450
         patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
