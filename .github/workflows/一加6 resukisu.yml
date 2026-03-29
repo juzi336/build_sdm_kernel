@@ -35,15 +35,35 @@ jobs:
         mkdir -p clang-aosp
         wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android16-qpr2-release/clang-${{ env.CLANG_VERSION }}.tar.gz
         tar -C clang-aosp -xf clang-${{ env.CLANG_VERSION }}.tar.gz
-
+        
     - name: 检出源码
       run: |
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.KERNEL_BRANCH }} $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
-        patch -p1 < $GITHUB_WORKSPACE/patches/kernel-4.19.patch
+        
+    - name: 应用 SUSFS 补丁
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
+        # 先备份原始文件
+        cp fs/namespace.c fs/namespace.c.bak
+        cp fs/proc/task_mmu.c fs/proc/task_mmu.c.bak
+        cp fs/proc/cmdline.c fs/proc/cmdline.c.bak
+        
+        # 尝试应用补丁，忽略错误
+        patch -p1 < $GITHUB_WORKSPACE/patches/susfs_patch_to_4.19.patch || true
+        bash $GITHUB_WORKSPACE/patches/susfs_inline_hook_patches.sh || true
+        
+    - name: 修复补丁错误
+      run: |
+        chmod +x $GITHUB_WORKSPACE/patches/fix_patch_errors.sh
+        bash $GITHUB_WORKSPACE/patches/fix_patch_errors.sh
+        
+    - name: 移除脏版本标记
+      run: |
+        cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
         sed -i 's/ -dirty//g' scripts/setlocalversion
-
+        
     - name: 编译内核
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace/android-kernel
@@ -53,7 +73,7 @@ jobs:
         MAKE_ARGS="ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi- KCFLAGS=-w"
         make O=out $MAKE_ARGS vendor/enchilada_defconfig
         make -j$(nproc --all) O=out $MAKE_ARGS
-
+        
     - name: 打包 AnyKernel3
       run: |
         cd $GITHUB_WORKSPACE/kernel_workspace
@@ -63,7 +83,7 @@ jobs:
         sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
         cp android-kernel/out/arch/arm64/boot/Image AnyKernel3/
         cd AnyKernel3 && zip -r ../Avium-Kernel-SDM845.zip ./*
-
+        
     - name: 上传刷机包
       uses: actions/upload-artifact@v4
       with:
