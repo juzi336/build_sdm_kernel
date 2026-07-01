@@ -60,7 +60,9 @@ jobs:
         cd $GITHUB_WORKSPACE/sm8450
         patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
         echo "susfs_patch完成"
+        
         bash $GITHUB_WORKSPACE/patches.sh
+        echo "patches完成"
 
     - name: 编译内核
       run: |
