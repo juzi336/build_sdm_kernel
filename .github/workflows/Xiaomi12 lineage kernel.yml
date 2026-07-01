@@ -40,7 +40,6 @@ jobs:
     - name: 检出源码
       run: |
         cd $GITHUB_WORKSPACE
-        wget https://raw.githubusercontent.com/juzi336/build_sdm_kernel/main/patches/patches.sh
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.BRANCH }} sm8450
         echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
@@ -60,9 +59,23 @@ jobs:
         cd $GITHUB_WORKSPACE/sm8450
         patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
         echo "susfs_patch完成"
+
+    - name: 集成 Re:Kernel
+      run: |
+        cd $GITHUB_WORKSPACE
+        # 克隆指定分支的 ReKernel-X 仓库
+        git clone -b upstream/v9.2 https://github.com/myflavor/ReKernel-X.git rekernel_tmp
         
-        bash $GITHUB_WORKSPACE/patches.sh
-        echo "patches完成"
+        # 将 Integrate 目录下的文件复制到内核源码根目录
+        cp -r rekernel_tmp/Integrate/* $GITHUB_WORKSPACE/sm8450/
+        
+        # 释放临时克隆的仓库
+        rm -rf rekernel_tmp
+        
+        # 进入内核目录执行 Re:Kernel 补丁和集成脚本
+        cd $GITHUB_WORKSPACE/sm8450
+        chmod +x patches.sh
+        ./patches.sh
 
     - name: 编译内核
       run: |
