@@ -40,6 +40,7 @@ jobs:
     - name: 检出源码
       run: |
         cd $GITHUB_WORKSPACE
+        wget https://raw.githubusercontent.com/juzi336/build_sdm_kernel/main/patches/patches.sh
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.BRANCH }} sm8450
         echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
@@ -59,6 +60,7 @@ jobs:
         cd $GITHUB_WORKSPACE/sm8450
         patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
         echo "susfs_patch完成"
+        bash $GITHUB_WORKSPACE/patches.sh
 
     - name: 编译内核
       run: |
