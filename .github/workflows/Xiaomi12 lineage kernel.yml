@@ -87,10 +87,10 @@ jobs:
         cd $GITHUB_WORKSPACE/sm8450/drivers/rekernel
         sed -i 's/obj-m/obj-y/g' Makefile
         
-        # 将整个 rekernel 文件夹挂载到内核驱动主链中
+        # 挂载到内核树（已修复 obj-y 路径叠罗汉导致的 Error 2 错误）
         cd $GITHUB_WORKSPACE/sm8450
         echo 'source "drivers/rekernel/Kconfig"' >> drivers/Kconfig
-        echo 'obj-y += drivers/rekernel/' >> drivers/Makefile
+        echo 'obj-y += rekernel/' >> drivers/Makefile
         echo "LKM 源码挂载内核树完成"
 
     - name: 编译内核
@@ -101,11 +101,8 @@ jobs:
         # 基础编译参数
         MAKE_ARGS="ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
         
-        # 结合文档：在这里传入自定义版本号变量
+        # 注入 Re:Kernel 专属编译版本号
         MAKE_ARGS="$MAKE_ARGS REKERNEL_X_VERSION=v9.2-BuiltIn"
-        
-        # (可选) 如果你想开启文档中提到的 Debug 调试级日志，请取消下面这行的注释(#)：
-        # MAKE_ARGS="$MAKE_ARGS KCFLAGS=-DREKERNEL_X_DEBUG"
         
         # 开始编译
         make O=out $MAKE_ARGS ${{ env.KERNEL_DEFCONFIG }}
