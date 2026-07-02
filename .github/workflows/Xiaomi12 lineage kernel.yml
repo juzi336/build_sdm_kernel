@@ -37,13 +37,12 @@ jobs:
         wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android16-qpr2-release/clang-${{ env.CLANG_VERSION }}.tar.gz
         tar -C ${{ github.workspace }}/clang-aosp -xf clang-${{ env.CLANG_VERSION }}.tar.gz
 
-    - name: 检出源码
+    - name: 检出源码并集成 KernelSU & SUSFS
       run: |
         cd $GITHUB_WORKSPACE
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.BRANCH }} sm8450
         echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
-        echo "CONFIG_KPM=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
         echo "CONFIG_KSU_SUSFS=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
         echo "设置内核完成"
         
@@ -61,29 +60,54 @@ jobs:
         patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
         echo "susfs_patch完成"
 
-    - name: 集成 Re:Kernel
+    - name: 集成 Re:Kernel 基础补丁 (Integrate)
       run: |
         cd $GITHUB_WORKSPACE
-        # 克隆指定分支的 ReKernel-X 仓库
         git clone -b upstream/v9.2 https://github.com/myflavor/ReKernel-X.git rekernel_tmp
-        
-        # 将 Integrate 目录下的文件复制到内核源码根目录
         cp -r rekernel_tmp/Integrate/* $GITHUB_WORKSPACE/sm8450/
-        
-        # 释放临时克隆的仓库
         rm -rf rekernel_tmp
         
-        # 进入内核目录执行 Re:Kernel 补丁和集成脚本
         cd $GITHUB_WORKSPACE/sm8450
         chmod +x patches.sh
         ./patches.sh
+        echo "基础补丁集成完成"
+
+    - name: 集成 Re:Kernel LKM 源码 (Built-in 模式优化版)
+      run: |
+        cd $GITHUB_WORKSPACE
+        # 克隆包含 LKM-Source 的 main 分支
+        git clone -b main https://github.com/myflavor/ReKernel-X.git rekernel_lkm
+        
+        # 创建目标驱动目录并将 LKM 源码全部复制过去
+        mkdir -p $GITHUB_WORKSPACE/sm8450/drivers/rekernel
+        cp -r rekernel_lkm/LKM-Source/* $GITHUB_WORKSPACE/sm8450/drivers/rekernel/
+        rm -rf rekernel_lkm
+        
+        # 进入目录，将原 Makefile 中的模块编译(obj-m)强行修改为内置编译(obj-y)
+        cd $GITHUB_WORKSPACE/sm8450/drivers/rekernel
+        sed -i 's/obj-m/obj-y/g' Makefile
+        
+        # 将整个 rekernel 文件夹挂载到内核驱动主链中
+        cd $GITHUB_WORKSPACE/sm8450
+        echo 'source "drivers/rekernel/Kconfig"' >> drivers/Kconfig
+        echo 'obj-y += drivers/rekernel/' >> drivers/Makefile
+        echo "LKM 源码挂载内核树完成"
 
     - name: 编译内核
       run: |
         cd sm8450
         export PATH="${{ github.workspace }}/clang-aosp/bin:$PATH"
         
+        # 基础编译参数
         MAKE_ARGS="ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
+        
+        # 结合文档：在这里传入自定义版本号变量
+        MAKE_ARGS="$MAKE_ARGS REKERNEL_X_VERSION=v9.2-BuiltIn"
+        
+        # (可选) 如果你想开启文档中提到的 Debug 调试级日志，请取消下面这行的注释(#)：
+        # MAKE_ARGS="$MAKE_ARGS KCFLAGS=-DREKERNEL_X_DEBUG"
+        
+        # 开始编译
         make O=out $MAKE_ARGS ${{ env.KERNEL_DEFCONFIG }}
         make -j$(nproc --all) O=out $MAKE_ARGS
 
