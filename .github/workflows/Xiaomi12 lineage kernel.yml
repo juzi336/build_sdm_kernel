@@ -1,4 +1,4 @@
-name: Build Xiaomi 12 SM8450 Kernel
+name: Build Xiaomi 12 & Redmi Note 12 Turbo Kernel (Multi-Variant)
 
 on:
   workflow_dispatch:
@@ -7,11 +7,38 @@ env:
   CLANG_VERSION: r563880c
   KERNEL_SRC: https://github.com/LineageOS/android_kernel_xiaomi_sm8450
   BRANCH: lineage-23.2
-  KERNEL_DEFCONFIG: gki_defconfig vendor/xiaomi_GKI.config vendor/cupid_GKI.config vendor/waipio_GKI.config vendor/debugfs.config
 
 jobs:
   build:
     runs-on: ubuntu-latest
+    # 扩展矩阵：2个机型 × 2种KSU状态 = 4种组合
+    strategy:
+      matrix:
+        include:
+          # --- Xiaomi 12 (cupid) 组合 ---
+          - device_name: "Xiaomi12-cupid"
+            defconfig: "gki_defconfig vendor/xiaomi_GKI.config vendor/cupid_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
+            enable_ksu: true
+            zip_name: "Xiaomi12-Cupid-KernelSU.zip"
+            artifact_name: "Xiaomi12-cupid-KernelSU-ZIP"
+          - device_name: "Xiaomi12-cupid"
+            defconfig: "gki_defconfig vendor/xiaomi_GKI.config vendor/cupid_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
+            enable_ksu: false
+            zip_name: "Xiaomi12-Cupid-NoKSU.zip"
+            artifact_name: "Xiaomi12-cupid-NoKSU-ZIP"
+
+          # --- Redmi Note 12 Turbo (marble) 组合 ---
+          - device_name: "RedmiNote12Turbo-marble"
+            defconfig: "gki_defconfig vendor/xiaomi_GKI.config vendor/marble_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
+            enable_ksu: true
+            zip_name: "RedmiNote12Turbo-Marble-KernelSU.zip"
+            artifact_name: "RedmiNote12Turbo-marble-KernelSU-ZIP"
+          - device_name: "RedmiNote12Turbo-marble"
+            defconfig: "gki_defconfig vendor/xiaomi_GKI.config vendor/marble_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
+            enable_ksu: false
+            zip_name: "RedmiNote12Turbo-Marble-NoKSU.zip"
+            artifact_name: "RedmiNote12Turbo-marble-NoKSU-ZIP"
+
     steps:
     - name: Setup SWAP
       uses: pierotofy/set-swap-space@master
@@ -37,28 +64,33 @@ jobs:
         wget https://android.googlesource.com/platform/prebuilts/clang/host/linux-x86/+archive/refs/heads/android16-qpr2-release/clang-${{ env.CLANG_VERSION }}.tar.gz
         tar -C ${{ github.workspace }}/clang-aosp -xf clang-${{ env.CLANG_VERSION }}.tar.gz
 
-    - name: 检出源码并集成 KernelSU & SUSFS
+    - name: 检出源码
       run: |
         cd $GITHUB_WORKSPACE
-        git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.BRANCH }} sm8450
+        sed -i 's/ -dirty//g' sm8450/scripts/setlocalversion
+
+    - name: 集成 KernelSU & SUSFS (仅在支持时执行)
+      if: ${{ matrix.enable_ksu == true }}
+      run: |
+        cd $GITHUB_WORKSPACE
+        # 下载 SUSFS 补丁源码
+        git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
+        
+        # 写入 KSU 相关的 Defconfig 配置
         echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
         echo "CONFIG_KSU_SUSFS=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
-        echo "设置内核完成"
         
+        # 运行 KernelSU 官方在线安装脚本
         cd $GITHUB_WORKSPACE/sm8450
         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
-        sed -i 's/ -dirty//g' scripts/setlocalversion
-        echo "设置ksu完成"
         
+        # 复制并应用 SUSFS 补丁文件
         cp $GITHUB_WORKSPACE/patch/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch $GITHUB_WORKSPACE/sm8450/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/fs/* $GITHUB_WORKSPACE/sm8450/fs/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/include/linux/* $GITHUB_WORKSPACE/sm8450/include/linux/
-        echo "cp完成"
-        
-        cd $GITHUB_WORKSPACE/sm8450
         patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
-        echo "susfs_patch完成"
+        echo "KernelSU 与 SUSFS 注入完成"
 
     - name: 集成 Re:Kernel 基础补丁 (Integrate)
       run: |
@@ -70,42 +102,34 @@ jobs:
         cd $GITHUB_WORKSPACE/sm8450
         chmod +x patches.sh
         ./patches.sh
-        echo "基础补丁集成完成"
+        echo "Re:Kernel 基础补丁集成完成"
 
     - name: 集成 Re:Kernel LKM 源码 (Built-in 模式优化版)
       run: |
         cd $GITHUB_WORKSPACE
-        # 克隆包含 LKM-Source 的 main 分支
         git clone -b main https://github.com/myflavor/ReKernel-X.git rekernel_lkm
         
-        # 创建目标驱动目录并将 LKM 源码全部复制过去
         mkdir -p $GITHUB_WORKSPACE/sm8450/drivers/rekernel
         cp -r rekernel_lkm/LKM-Source/* $GITHUB_WORKSPACE/sm8450/drivers/rekernel/
         rm -rf rekernel_lkm
         
-        # 进入目录，将原 Makefile 中的模块编译(obj-m)强行修改为内置编译(obj-y)
         cd $GITHUB_WORKSPACE/sm8450/drivers/rekernel
         sed -i 's/obj-m/obj-y/g' Makefile
         
-        # 挂载到内核树（已修复 obj-y 路径叠罗汉导致的 Error 2 错误）
         cd $GITHUB_WORKSPACE/sm8450
         echo 'source "drivers/rekernel/Kconfig"' >> drivers/Kconfig
         echo 'obj-y += rekernel/' >> drivers/Makefile
-        echo "LKM 源码挂载内核树完成"
+        echo "Re:Kernel LKM 源码挂载内核树完成"
 
-    - name: 编译内核
+    - name: 编译内核 (${{ matrix.device_name }} - KSU:${{ matrix.enable_ksu }})
       run: |
         cd sm8450
         export PATH="${{ github.workspace }}/clang-aosp/bin:$PATH"
         
-        # 基础编译参数
         MAKE_ARGS="ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
-        
-        # 注入 Re:Kernel 专属编译版本号
         MAKE_ARGS="$MAKE_ARGS REKERNEL_X_VERSION=v9.2-BuiltIn"
         
-        # 开始编译
-        make O=out $MAKE_ARGS ${{ env.KERNEL_DEFCONFIG }}
+        make O=out $MAKE_ARGS ${{ matrix.defconfig }}
         make -j$(nproc --all) O=out $MAKE_ARGS
 
     - name: 打包 AnyKernel3
@@ -116,10 +140,10 @@ jobs:
         sed -i 's!BLOCK=.*!BLOCK=auto;!g' AnyKernel3/anykernel.sh
         sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
         cp sm8450/out/arch/arm64/boot/Image AnyKernel3/
-        cd AnyKernel3 && zip -r ../Xiaomi-cupid-Kernel.zip ./*
+        cd AnyKernel3 && zip -r ../${{ matrix.zip_name }} ./*
 
     - name: 上传刷机包 (AnyKernel3)
       uses: actions/upload-artifact@v4
       with:
-        name: Xiaomi12-cupid-Kernel-ZIP
-        path: ${{ github.workspace }}/Xiaomi-cupid-Kernel.zip
+        name: ${{ matrix.artifact_name }}
+        path: ${{ github.workspace }}/${{ matrix.zip_name }}
