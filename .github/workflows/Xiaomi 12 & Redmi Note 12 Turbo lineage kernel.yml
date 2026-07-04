@@ -10,34 +10,15 @@ env:
 
 jobs:
   build:
+    # 只显示你定义的精简名称
+    name: ${{ matrix.device }}-${{ matrix.ksu_status }}
     runs-on: ubuntu-latest
-    # 扩展矩阵：2个机型 × 2种KSU状态 = 4种组合
+    
     strategy:
       matrix:
-        include:
-          # --- Xiaomi 12 (cupid) 组合 ---
-          - device_name: "Xiaomi12-cupid"
-            defconfig: "gki_defconfig vendor/xiaomi_GKI.config vendor/cupid_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
-            enable_ksu: true
-            zip_name: "Xiaomi12-Cupid-KernelSU.zip"
-            artifact_name: "Xiaomi12-cupid-KernelSU-ZIP"
-          - device_name: "Xiaomi12-cupid"
-            defconfig: "gki_defconfig vendor/xiaomi_GKI.config vendor/cupid_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
-            enable_ksu: false
-            zip_name: "Xiaomi12-Cupid-NoKSU.zip"
-            artifact_name: "Xiaomi12-cupid-NoKSU-ZIP"
-
-          # --- Redmi Note 12 Turbo (marble) 组合 ---
-          - device_name: "RedmiNote12Turbo-marble"
-            defconfig: "gki_defconfig vendor/xiaomi_GKI.config vendor/marble_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
-            enable_ksu: true
-            zip_name: "RedmiNote12Turbo-Marble-KernelSU.zip"
-            artifact_name: "RedmiNote12Turbo-marble-KernelSU-ZIP"
-          - device_name: "RedmiNote12Turbo-marble"
-            defconfig: "gki_defconfig vendor/xiaomi_GKI.config vendor/marble_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
-            enable_ksu: false
-            zip_name: "RedmiNote12Turbo-Marble-NoKSU.zip"
-            artifact_name: "RedmiNote12Turbo-marble-NoKSU-ZIP"
+        # 只保留精简的组合代号，彻底斩断长字符串拼接
+        device: [ "Xiaomi12", "RedmiNote12Turbo" ]
+        ksu_status: [ "WithKSU", "NoKSU" ]
 
     steps:
     - name: Setup SWAP
@@ -70,22 +51,17 @@ jobs:
         git clone --depth=1 ${{ env.KERNEL_SRC }} -b ${{ env.BRANCH }} sm8450
         sed -i 's/ -dirty//g' sm8450/scripts/setlocalversion
 
-    - name: 集成 KernelSU & SUSFS (仅在支持时执行)
-      if: ${{ matrix.enable_ksu == true }}
+    - name: 集成 KernelSU & SUSFS
+      if: ${{ matrix.ksu_status == 'WithKSU' }}
       run: |
         cd $GITHUB_WORKSPACE
-        # 下载 SUSFS 补丁源码
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
-        
-        # 写入 KSU 相关的 Defconfig 配置
         echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
         echo "CONFIG_KSU_SUSFS=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
         
-        # 运行 KernelSU 官方在线安装脚本
         cd $GITHUB_WORKSPACE/sm8450
         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
         
-        # 复制并应用 SUSFS 补丁文件
         cp $GITHUB_WORKSPACE/patch/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch $GITHUB_WORKSPACE/sm8450/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/fs/* $GITHUB_WORKSPACE/sm8450/fs/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/include/linux/* $GITHUB_WORKSPACE/sm8450/include/linux/
@@ -121,7 +97,7 @@ jobs:
         echo 'obj-y += rekernel/' >> drivers/Makefile
         echo "Re:Kernel LKM 源码挂载内核树完成"
 
-    - name: 编译内核 (${{ matrix.device_name }} - KSU:${{ matrix.enable_ksu }})
+    - name: 编译内核
       run: |
         cd sm8450
         export PATH="${{ github.workspace }}/clang-aosp/bin:$PATH"
@@ -129,7 +105,14 @@ jobs:
         MAKE_ARGS="ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
         MAKE_ARGS="$MAKE_ARGS REKERNEL_X_VERSION=v9.2-BuiltIn"
         
-        make O=out $MAKE_ARGS ${{ matrix.defconfig }}
+        # 核心改动：在内部根据机型动态赋值 defconfig 变量，避免污染外部任务栏名称
+        if [ "${{ matrix.device }}" = "Xiaomi12" ]; then
+            CONFIG_LIST="gki_defconfig vendor/xiaomi_GKI.config vendor/cupid_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
+        else
+            CONFIG_LIST="gki_defconfig vendor/xiaomi_GKI.config vendor/marble_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
+        fi
+        
+        make O=out $MAKE_ARGS $CONFIG_LIST
         make -j$(nproc --all) O=out $MAKE_ARGS
 
     - name: 打包 AnyKernel3
@@ -140,10 +123,13 @@ jobs:
         sed -i 's!BLOCK=.*!BLOCK=auto;!g' AnyKernel3/anykernel.sh
         sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
         cp sm8450/out/arch/arm64/boot/Image AnyKernel3/
-        cd AnyKernel3 && zip -r ../${{ matrix.zip_name }} ./*
+        
+        # 根据矩阵代号动态命名 zip 压缩包
+        ZIP_NAME="${{ matrix.device }}-${{ matrix.ksu_status }}.zip"
+        cd AnyKernel3 && zip -r ../$ZIP_NAME ./*
 
     - name: 上传刷机包 (AnyKernel3)
       uses: actions/upload-artifact@v4
       with:
-        name: ${{ matrix.artifact_name }}
-        path: ${{ github.workspace }}/${{ matrix.zip_name }}
+        name: ${{ matrix.device }}-${{ matrix.ksu_status }}-ZIP
+        path: ${{ github.workspace }}/${{ matrix.device }}-${{ matrix.ksu_status }}.zip
