@@ -1,4 +1,4 @@
-name: Build Xiaomi 12 & Redmi Note 12 Turbo Kernel (Multi-Variant)
+name: Build Xiaomi 12 & 12S Pro & Redmi Note 12 Turbo Kernel
 
 on:
   workflow_dispatch:
@@ -10,14 +10,12 @@ env:
 
 jobs:
   build:
-    # 只显示你定义的精简名称
     name: ${{ matrix.device }}-${{ matrix.ksu_status }}
     runs-on: ubuntu-latest
     
     strategy:
       matrix:
-        # 只保留精简的组合代号，彻底斩断长字符串拼接
-        device: [ "Xiaomi12", "RedmiNote12Turbo" ]
+        device: [ "Xiaomi12", "Xiaomi12SPro", "RedmiNote12Turbo" ]
         ksu_status: [ "WithKSU", "NoKSU" ]
 
     steps:
@@ -105,9 +103,10 @@ jobs:
         MAKE_ARGS="ARCH=arm64 LLVM=1 LLVM_IAS=1 CC=clang LD=ld.lld CLANG_TRIPLE=aarch64-linux-gnu- CROSS_COMPILE=aarch64-linux-gnu- CROSS_COMPILE_ARM32=arm-linux-gnueabi-"
         MAKE_ARGS="$MAKE_ARGS REKERNEL_X_VERSION=v9.2-BuiltIn"
         
-        # 核心改动：在内部根据机型动态赋值 defconfig 变量，避免污染外部任务栏名称
         if [ "${{ matrix.device }}" = "Xiaomi12" ]; then
             CONFIG_LIST="gki_defconfig vendor/xiaomi_GKI.config vendor/cupid_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
+        elif [ "${{ matrix.device }}" = "Xiaomi12SPro" ]; then
+            CONFIG_LIST="gki_defconfig vendor/xiaomi_GKI.config vendor/unicorn_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
         else
             CONFIG_LIST="gki_defconfig vendor/xiaomi_GKI.config vendor/marble_GKI.config vendor/waipio_GKI.config vendor/debugfs.config"
         fi
@@ -124,7 +123,6 @@ jobs:
         sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
         cp sm8450/out/arch/arm64/boot/Image AnyKernel3/
         
-        # 根据矩阵代号动态命名 zip 压缩包
         ZIP_NAME="${{ matrix.device }}-${{ matrix.ksu_status }}.zip"
         cd AnyKernel3 && zip -r ../$ZIP_NAME ./*
 
