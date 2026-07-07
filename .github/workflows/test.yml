@@ -32,13 +32,15 @@ jobs:
       run: |
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
-        repo init -u https://github.com/xiaomi-sm8450-kernel/manifest.git -b zeus-s-oss
-        repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+        # 加上 --depth=1，只拉取最新提交，体积缩小90%
+        repo init -u https://github.com/xiaomi-sm8450-kernel/manifest.git -b zeus-s-oss --depth=1
+        # 优化同步参数，防止死锁
+        repo sync -j$(nproc --all) --force-sync --no-clone-bundle --no-tags --current-branch
 
     - name: 集成 KernelSU & SUSFS
       if: ${{ matrix.ksu_status == 'WithKSU' }}
       run: |
-        # 写入 KSU 相关的 Defconfig 配置（根据该源码路径，修改 gki_defconfig）
+        # 写入 KSU 相关的 Defconfig 配置
         echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
         echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
         
