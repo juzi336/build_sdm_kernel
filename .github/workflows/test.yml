@@ -40,6 +40,9 @@ jobs:
     - name: 集成 KernelSU & SUSFS
       if: ${{ matrix.ksu_status == 'WithKSU' }}
       run: |
+        # 切换到真正的内核通用源码树目录
+        cd kernel_platform/common
+        
         # 写入 KSU 相关的 Defconfig 配置
         echo "CONFIG_KSU=y" >> arch/arm64/configs/gki_defconfig
         echo "CONFIG_KSU_SUSFS=y" >> arch/arm64/configs/gki_defconfig
@@ -58,6 +61,7 @@ jobs:
 
     - name: 集成 Re:Kernel 基础补丁 (Integrate)
       run: |
+        cd kernel_platform/common
         git clone -b upstream/v9.2 https://github.com/myflavor/ReKernel-X.git rekernel_tmp
         cp -r rekernel_tmp/Integrate/* ./
         rm -rf rekernel_tmp
@@ -66,6 +70,7 @@ jobs:
 
     - name: 集成 Re:Kernel LKM 源码 (Built-in 模式优化版)
       run: |
+        cd kernel_platform/common
         git clone -b main https://github.com/myflavor/ReKernel-X.git rekernel_lkm
         mkdir -p drivers/rekernel
         cp -r rekernel_lkm/LKM-Source/* drivers/rekernel/
@@ -87,8 +92,8 @@ jobs:
         sed -i 's!BLOCK=.*!BLOCK=auto;!g' AnyKernel3/anykernel.sh
         sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
         
-        # 根据该源码树的产物路径复制编译好的 Image
-        cp device/qcom/unicorn-kernel/Image AnyKernel3/
+        # 复制高通新源码树架构下的产物 Image
+        cp out/msm-kernel-unicorn-v/dist/Image AnyKernel3/ || cp kernel_platform/out/msm-kernel-unicorn-v/dist/Image AnyKernel3/ || cp device/qcom/unicorn-kernel/Image AnyKernel3/
         
         ZIP_NAME="Xiaomi12SPro-${{ matrix.ksu_status }}.zip"
         cd AnyKernel3 && zip -r ../$ZIP_NAME ./*
