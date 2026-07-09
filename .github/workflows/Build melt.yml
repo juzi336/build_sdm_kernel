@@ -6,22 +6,50 @@ on:
 jobs:
   build:
     name: RedmiNote12Turbo-${{ matrix.ksu_status }}
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-22.04
     
     strategy:
       matrix:
         ksu_status: [ "WithKSU", "NoKSU" ]
 
     steps:
+    # 核心新增：腾出 30GB+ 空间，彻底解决 No space left on device 报错
+    - name: 极限清理磁盘空间
+      uses: jlumbroso/free-disk-space@main
+      with:
+        tool-cache: true
+        android: true
+        dotnet: true
+        haskell: true
+        large-packages: true
+        docker-images: true
+        swap: false
+
     - name: Setup SWAP
       uses: pierotofy/set-swap-space@master
       with:
           swap-size-gb: 16
           
-    - name: 准备环境
+    - name: 准备环境 (安装原生 Python 2)
       run: |
         sudo apt-get update
-        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip xz-utils python-is-python3
+        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip xz-utils libtinfo5
+
+        # 强行下载并安装 Ubuntu 官方最后遗留的编译版 Python 2.7 核心包
+        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python2.7/libpython2.7-minimal_2.7.18-13ubuntu1.2_amd64.deb
+        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python2.7/python2.7-minimal_2.7.18-13ubuntu1.2_amd64.deb
+        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python2.7/libpython2.7-stdlib_2.7.18-13ubuntu1.2_amd64.deb
+        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python2.7/python2.7_2.7.18-13ubuntu1.2_amd64.deb
+        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python-defaults/python2-minimal_2.7.18-3_amd64.deb
+        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python-defaults/python2_2.7.18-3_amd64.deb
+
+        sudo dpkg -i libpython2.7-minimal_2.7.18-13ubuntu1.2_amd64.deb
+        sudo dpkg -i python2.7-minimal_2.7.18-13ubuntu1.2_amd64.deb
+        sudo dpkg -i libpython2.7-stdlib_2.7.18-13ubuntu1.2_amd64.deb
+        sudo dpkg -i python2.7-v*
+        sudo dpkg -i python2-minimal_2.7.18-3_amd64.deb
+        sudo dpkg -i python2_2.7.18-3_amd64.deb
+        rm *.deb
 
     - name: 编译器缓存
       id: cache-llvm
@@ -61,7 +89,6 @@ jobs:
         cp $GITHUB_WORKSPACE/patch/kernel_patches/fs/* $GITHUB_WORKSPACE/sm8450/fs/
         cp $GITHUB_WORKSPACE/patch/kernel_patches/include/linux/* $GITHUB_WORKSPACE/sm8450/include/linux/
         patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
-        echo "KernelSU 与 SUSFS 注入完成"
 
     - name: 集成 Re:Kernel 基础补丁 (Integrate)
       run: |
@@ -73,7 +100,6 @@ jobs:
         cd $GITHUB_WORKSPACE/sm8450
         chmod +x patches.sh
         ./patches.sh
-        echo "Re:Kernel 基础补丁集成完成"
 
     - name: 集成 Re:Kernel LKM 源码 (同目录寄生内建版)
       run: |
@@ -92,8 +118,6 @@ jobs:
     - name: 调用作者脚本编译并打包内核
       run: |
         cd $GITHUB_WORKSPACE/sm8450
-        
-        sudo ln -sf /usr/bin/python3 /usr/bin/python2
         
         ln -sf ~/build_toolchain/llvm-22.1.8-x86_64/bin/clang ~/build_toolchain/llvm-22.1.8-x86_64/bin/aarch64-linux-gnu-clang
         
