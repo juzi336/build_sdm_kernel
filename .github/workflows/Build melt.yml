@@ -13,7 +13,7 @@ jobs:
         ksu_status: [ "WithKSU", "NoKSU" ]
 
     steps:
-    # 核心新增：腾出 30GB+ 空间，彻底解决 No space left on device 报错
+    # 彻底解决磁盘撑爆问题，腾出 30GB+ 空间
     - name: 极限清理磁盘空间
       uses: jlumbroso/free-disk-space@main
       with:
@@ -30,26 +30,10 @@ jobs:
       with:
           swap-size-gb: 16
           
-    - name: 准备环境 (安装原生 Python 2)
+    - name: 准备环境
       run: |
         sudo apt-get update
-        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip xz-utils libtinfo5
-
-        # 强行下载并安装 Ubuntu 官方最后遗留的编译版 Python 2.7 核心包
-        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python2.7/libpython2.7-minimal_2.7.18-13ubuntu1.2_amd64.deb
-        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python2.7/python2.7-minimal_2.7.18-13ubuntu1.2_amd64.deb
-        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python2.7/libpython2.7-stdlib_2.7.18-13ubuntu1.2_amd64.deb
-        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python2.7/python2.7_2.7.18-13ubuntu1.2_amd64.deb
-        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python-defaults/python2-minimal_2.7.18-3_amd64.deb
-        curl -LO http://security.ubuntu.com/ubuntu/pool/universe/p/python-defaults/python2_2.7.18-3_amd64.deb
-
-        sudo dpkg -i libpython2.7-minimal_2.7.18-13ubuntu1.2_amd64.deb
-        sudo dpkg -i python2.7-minimal_2.7.18-13ubuntu1.2_amd64.deb
-        sudo dpkg -i libpython2.7-stdlib_2.7.18-13ubuntu1.2_amd64.deb
-        sudo dpkg -i python2.7-v*
-        sudo dpkg -i python2-minimal_2.7.18-3_amd64.deb
-        sudo dpkg -i python2_2.7.18-3_amd64.deb
-        rm *.deb
+        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip xz-utils python3-pip
 
     - name: 编译器缓存
       id: cache-llvm
@@ -118,6 +102,10 @@ jobs:
     - name: 调用作者脚本编译并打包内核
       run: |
         cd $GITHUB_WORKSPACE/sm8450
+        
+        # 稳定的伪装软链接法，配合解除外部管理限制
+        export PIP_BREAK_SYSTEM_PACKAGES=1
+        sudo ln -sf /usr/bin/python3 /usr/bin/python2
         
         ln -sf ~/build_toolchain/llvm-22.1.8-x86_64/bin/clang ~/build_toolchain/llvm-22.1.8-x86_64/bin/aarch64-linux-gnu-clang
         
