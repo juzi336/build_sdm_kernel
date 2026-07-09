@@ -21,7 +21,7 @@ jobs:
     - name: 准备环境
       run: |
         sudo apt-get update
-        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip xz-utils
+        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip xz-utils python-is-python3
 
     - name: 编译器缓存
       id: cache-llvm
@@ -92,6 +92,8 @@ jobs:
     - name: 调用作者脚本编译并打包内核
       run: |
         cd $GITHUB_WORKSPACE/sm8450
+        
+        sudo ln -sf /usr/bin/python3 /usr/bin/python2
         
         ln -sf ~/build_toolchain/llvm-22.1.8-x86_64/bin/clang ~/build_toolchain/llvm-22.1.8-x86_64/bin/aarch64-linux-gnu-clang
         
