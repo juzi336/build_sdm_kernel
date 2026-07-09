@@ -5,7 +5,7 @@ on:
 
 jobs:
   build:
-    name: RedmiNote12Turbo-${{ matrix.ksu_status }}
+    name: RedmiNote12Turbo-Release
     runs-on: ubuntu-22.04
     
     strategy:
@@ -13,7 +13,6 @@ jobs:
         ksu_status: [ "WithKSU", "NoKSU" ]
 
     steps:
-    # 彻底解决磁盘撑爆问题，腾出 30GB+ 空间
     - name: 极限清理磁盘空间
       uses: jlumbroso/free-disk-space@main
       with:
@@ -99,11 +98,10 @@ jobs:
         
         echo "ccflags-y += -DRKX_VERSION=\\\"v9.2-BuiltIn\\\"" >> Makefile
 
-    - name: 调用作者脚本编译并打包内核
+    - name: 调用作者脚本编译内核
       run: |
         cd $GITHUB_WORKSPACE/sm8450
         
-        # 稳定的伪装软链接法，配合解除外部管理限制
         export PIP_BREAK_SYSTEM_PACKAGES=1
         sudo ln -sf /usr/bin/python3 /usr/bin/python2
         
@@ -112,10 +110,33 @@ jobs:
         chmod +x build_bouquet.sh
         ./build_bouquet.sh
 
+    - name: 组装 AnyKernel3 并生成标准 Zip 刷机包
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone -b Marble-Melt https://github.com/Pzqqt/AnyKernel3.git ak3
+        cd ak3
+        
+        if [ -f "$GITHUB_WORKSPACE/Bouquet_marble_release/Image_susfs" ]; then
+          cp $GITHUB_WORKSPACE/Bouquet_marble_release/Image_susfs ./Image
+        elif [ -f "$GITHUB_WORKSPACE/Bouquet_marble_release/Image_ksu" ]; then
+          cp $GITHUB_WORKSPACE/Bouquet_marble_release/Image_ksu ./Image
+        else
+          cp $GITHUB_WORKSPACE/Bouquet_marble_release/Image ./Image
+        fi
+        
+        if [ -f "$GITHUB_WORKSPACE/Bouquet_marble_release/devicetree/dtbo.img" ]; then
+          cp $GITHUB_WORKSPACE/Bouquet_marble_release/devicetree/dtbo.img ./_dtb/dtbo.img
+        fi
+        
+        cp $GITHUB_WORKSPACE/Bouquet_marble_release/vendor_boot_modules/*.ko ./_modules_hyperos/_vendor_boot_modules/ || true
+        cp $GITHUB_WORKSPACE/Bouquet_marble_release/vendor_dlkm_modules/*.ko ./_modules_hyperos/_vendor_dlkm_modules/ || true
+        
+        zip -r9 "../Melt-Kernel-Marble-${{ matrix.ksu_status }}.zip" *
+
     - name: 上传编译产物
       uses: actions/upload-artifact@v4
       with:
         name: Melt-Marble-${{ matrix.ksu_status }}-Artifacts
         path: |
-          sm8450/*.zip
-          sm8450/out/arch/arm64/boot/Image
+          *.zip
+          Bouquet_marble_release/Image*
