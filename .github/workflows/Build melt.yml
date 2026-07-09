@@ -1,0 +1,115 @@
+name: Build Melt Kernel (Redmi Note 12 Turbo)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: RedmiNote12Turbo-${{ matrix.ksu_status }}
+    runs-on: ubuntu-latest
+    
+    strategy:
+      matrix:
+        ksu_status: [ "WithKSU", "NoKSU" ]
+
+    steps:
+    - name: Setup SWAP
+      uses: pierotofy/set-swap-space@master
+      with:
+          swap-size-gb: 16
+          
+    - name: 准备环境
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip xz-utils
+
+    - name: 下载 LLVM 22.1.7 编译器
+      run: |
+        mkdir -p ${{ github.workspace }}/clang-llvm
+        cd ${{ github.workspace }}/clang-llvm
+        # 使用你指定的官方 22.1.7 Linux-X64 编译器直链
+        wget https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.7/LLVM-22.1.7-Linux-X64.tar.xz
+        tar -xf LLVM-22.1.7-Linux-X64.tar.xz --strip-components=1
+        rm LLVM-22.1.7-Linux-X64.tar.xz
+
+    - name: 检出源码 (Melt Kernel bouquet)
+      run: |
+        cd $GITHUB_WORKSPACE
+        # 跨仓库克隆 Pzqqt 的内核源码并锁定 bouquet 分支
+        git clone --depth=1 https://github.com/Pzqqt/android_kernel_xiaomi_marble.git -b bouquet sm8450
+        sed -i 's/ -dirty//g' sm8450/scripts/setlocalversion
+
+    - name: 集成 KernelSU & SUSFS
+      if: ${{ matrix.ksu_status == 'WithKSU' }}
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
+        echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
+        echo "CONFIG_KSU_SUSFS=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
+        
+        cd $GITHUB_WORKSPACE/sm8450
+        curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
+        
+        cp $GITHUB_WORKSPACE/patch/kernel_patches/50_add_susfs_in_gki-android12-5.10.patch $GITHUB_WORKSPACE/sm8450/
+        cp $GITHUB_WORKSPACE/patch/kernel_patches/fs/* $GITHUB_WORKSPACE/sm8450/fs/
+        cp $GITHUB_WORKSPACE/patch/kernel_patches/include/linux/* $GITHUB_WORKSPACE/sm8450/include/linux/
+        patch -p1 < 50_add_susfs_in_gki-android12-5.10.patch
+        echo "KernelSU 与 SUSFS 注入完成"
+
+    - name: 集成 Re:Kernel 基础补丁 (Integrate)
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone -b upstream/v9.2 https://github.com/myflavor/ReKernel-X.git rekernel_tmp
+        cp -r rekernel_tmp/Integrate/* $GITHUB_WORKSPACE/sm8450/
+        rm -rf rekernel_tmp
+        
+        cd $GITHUB_WORKSPACE/sm8450
+        chmod +x patches.sh
+        ./patches.sh
+        echo "Re:Kernel 基础补丁集成完成"
+
+    - name: 集成 Re:Kernel LKM 源码 (Built-in 模式优化版)
+      run: |
+        cd $GITHUB_WORKSPACE
+        git clone -b main https://github.com/myflavor/ReKernel-X.git rekernel_lkm
+        
+        mkdir -p $GITHUB_WORKSPACE/sm8450/drivers/rekernel
+        cp -r rekernel_lkm/LKM-Source/* $GITHUB_WORKSPACE/sm8450/drivers/rekernel/
+        rm -rf rekernel_lkm
+        
+        cd $GITHUB_WORKSPACE/sm8450/drivers/rekernel
+        sed -i 's/obj-m/obj-y/g' Makefile
+        
+        cd $GITHUB_WORKSPACE/sm8450
+        echo 'source "drivers/rekernel/Kconfig"' >> drivers/Kconfig
+        echo 'obj-y += rekernel/' >> drivers/Makefile
+        echo "Re:Kernel LKM 源码挂载内核树完成"
+
+    - name: 调用作者脚本编译并打包内核
+      run: |
+        cd $GITHUB_WORKSPACE/sm8450
+        
+        # 1. 配置全局环境变量，将你的 LLVM 注入系统的 PATH 中
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export PATH="${{ github.workspace }}/clang-llvm/bin:$PATH"
+        
+        # 2. 补全软链接，防止高通原厂驱动脚本调用裸命令报错
+        ln -sf ${{ github.workspace }}/clang-llvm/bin/clang ${{ github.workspace }}/clang-llvm/bin/aarch64-linux-gnu-clang
+        
+        # 3. 注入你的 Re:Kernel 编译版本变量
+        export REKERNEL_X_VERSION="v9.2-BuiltIn"
+        
+        # 4. 赋予执行权限，并直接调用作者的统一入口构建脚本
+        chmod +x build_bouquet.sh
+        ./build_bouquet.sh
+
+    - name: 上传编译产物 (作者脚本打包出的 zip 刷机包)
+      uses: actions/upload-artifact@v4
+      with:
+        name: Melt-Marble-${{ matrix.ksu_status }}-Artifacts
+        # 脚本跑完后，它会自动把打包好的 AnyKernel3 压缩包放在源码根目录或者 out 目录下
+        # 这里使用通配符捕获所有编译出的 zip 包和内核镜像
+        path: |
+          sm8450/*.zip
+          sm8450/out/arch/arm64/boot/Image
