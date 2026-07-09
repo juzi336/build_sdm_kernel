@@ -6,7 +6,7 @@ on:
 jobs:
   build:
     name: RedmiNote12Turbo-${{ matrix.ksu_status }}
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04 # 强制插队，告别排队
     
     strategy:
       matrix:
@@ -51,7 +51,7 @@ jobs:
         cd $GITHUB_WORKSPACE
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
         
-        # 【修正核心】强行灌入 Melt 机型专用的 marble_defconfig 中，确保 merge_config 时生效
+        # 修正：直接写入最终生效的 marble_defconfig
         echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/marble_defconfig
         echo "CONFIG_KSU_SUSFS=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/marble_defconfig
         
@@ -106,8 +106,6 @@ jobs:
         export REKERNEL_X_VERSION="v9.2-BuiltIn"
         
         chmod +x build_bouquet.sh
-        # 注意：如果构建脚本本身支持传递参数，开启 KSU 构建可能需要追加对应的传参（如 ./build_bouquet.sh --ksu --susfs）
-        # 这里维持调用原脚本，作者脚本在进行 merge_config 时会自动读取刚刚追加了符号的 marble_defconfig
         ./build_bouquet.sh
 
     - name: 上传编译产物 (作者脚本打包出的 zip 刷机包)
