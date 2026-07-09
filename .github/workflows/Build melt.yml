@@ -27,28 +27,21 @@ jobs:
       id: cache-llvm
       uses: actions/cache@v4
       with:
-        # 直接缓存作者脚本指定的家目录下工具链路径
         path: ~/build_toolchain/llvm-22.1.8-x86_64
         key: llvm-22.1.8-linux-x64
 
     - name: 下载 LLVM 22.1.8 编译器
       if: steps.cache-llvm.outputs.cache-hit != 'true'
       run: |
-        # 完美迎合作者脚本要求的硬编码路径建立文件夹
         mkdir -p ~/build_toolchain/llvm-22.1.8-x86_64
         cd ~/build_toolchain/llvm-22.1.8-x86_64
-        
-        # 使用你指定的 22.1.8 官方新直链
         wget https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz
-        
-        # 解压并剥离掉压缩包自带的顶层目录名，使其完全平铺到当前目录下
         tar -xf LLVM-22.1.8-Linux-X64.tar.xz --strip-components=1
         rm LLVM-22.1.8-Linux-X64.tar.xz
 
     - name: 检出源码 (Melt Kernel bouquet)
       run: |
         cd $GITHUB_WORKSPACE
-        # 跨仓库克隆 Pzqqt 的内核源码并锁定 bouquet 分支
         git clone --depth=1 https://github.com/Pzqqt/android_kernel_xiaomi_marble.git -b bouquet sm8450
         sed -i 's/ -dirty//g' sm8450/scripts/setlocalversion
 
@@ -57,8 +50,10 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE
         git clone https://gitlab.com/simonpunk/susfs4ksu.git -b gki-android12-5.10 patch
-        echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
-        echo "CONFIG_KSU_SUSFS=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/gki_defconfig
+        
+        # 【修正核心】强行灌入 Melt 机型专用的 marble_defconfig 中，确保 merge_config 时生效
+        echo "CONFIG_KSU=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/marble_defconfig
+        echo "CONFIG_KSU_SUSFS=y" >> $GITHUB_WORKSPACE/sm8450/arch/arm64/configs/marble_defconfig
         
         cd $GITHUB_WORKSPACE/sm8450
         curl -LSs "https://raw.githubusercontent.com/ReSukiSU/ReSukiSU/main/kernel/setup.sh" | bash
@@ -102,14 +97,17 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/sm8450
         
-        # 1. 注入你指定的 Re:Kernel 编译版本变量
-        export REKERNEL_X_VERSION="v9.2-BuiltIn"
+        export ARCH=arm64
+        export SUBARCH=arm64
+        export PATH="${{ github.workspace }}/clang-llvm/bin:$PATH"
         
-        # 2. 补全软链接到作者要求的 bin 下，防止高通原厂驱动调用裸 aarch64 交叉编译器命令报错
         ln -sf ~/build_toolchain/llvm-22.1.8-x86_64/bin/clang ~/build_toolchain/llvm-22.1.8-x86_64/bin/aarch64-linux-gnu-clang
         
-        # 3. 赋予执行权限，直接调用作者的统一入口构建脚本
+        export REKERNEL_X_VERSION="v9.2-BuiltIn"
+        
         chmod +x build_bouquet.sh
+        # 注意：如果构建脚本本身支持传递参数，开启 KSU 构建可能需要追加对应的传参（如 ./build_bouquet.sh --ksu --susfs）
+        # 这里维持调用原脚本，作者脚本在进行 merge_config 时会自动读取刚刚追加了符号的 marble_defconfig
         ./build_bouquet.sh
 
     - name: 上传编译产物 (作者脚本打包出的 zip 刷机包)
