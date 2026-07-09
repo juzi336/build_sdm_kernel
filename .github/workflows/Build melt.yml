@@ -75,7 +75,7 @@ jobs:
         ./patches.sh
         echo "Re:Kernel 基础补丁集成完成"
 
-    - name: 集成 Re:Kernel LKM 源码 (Built-in 修正版)
+    - name: 集成 Re:Kernel LKM 源码 (Built-in 强切版)
       run: |
         cd $GITHUB_WORKSPACE
         git clone -b main https://github.com/myflavor/ReKernel-X.git rekernel_lkm
@@ -84,27 +84,21 @@ jobs:
         cp -r rekernel_lkm/LKM-Source/* $GITHUB_WORKSPACE/sm8450/drivers/rekernel/
         rm -rf rekernel_lkm
         
-        # 1. 强制重写其 Makefile 目标组合方式，将其编译进 obj-y 核心树中
+        # 将复合对象打散重写为标准 obj-y，强制内建进内核主镜像
         cd $GITHUB_WORKSPACE/sm8450/drivers/rekernel
         echo "obj-y += rkx.o rkx_genl.o rkx_netuid.o rkx_frozen.o rkx_binder.o rkx_signal.o rkx_netfilter.o rkx_binder_kp.o" > Makefile
         echo 'ccflags-y += -DRKX_VERSION=\"v9.2-BuiltIn\"' >> Makefile
         
-        # 2. 挂载进上一级内核编译网络
+        # 挂载进内核树
         cd $GITHUB_WORKSPACE/sm8450
         echo 'obj-y += rekernel/' >> drivers/Makefile
-        echo "Re:Kernel 强制内建转换完成"
+        echo "Re:Kernel Built-in 模式挂载完成"
 
     - name: 调用作者脚本编译并打包内核
       run: |
         cd $GITHUB_WORKSPACE/sm8450
         
-        export ARCH=arm64
-        export SUBARCH=arm64
-        export PATH="${{ github.workspace }}/clang-llvm/bin:$PATH"
-        
         ln -sf ~/build_toolchain/llvm-22.1.8-x86_64/bin/clang ~/build_toolchain/llvm-22.1.8-x86_64/bin/aarch64-linux-gnu-clang
-        
-        export REKERNEL_X_VERSION="v9.2-BuiltIn"
         
         chmod +x build_bouquet.sh
         ./build_bouquet.sh
