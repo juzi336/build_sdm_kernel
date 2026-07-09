@@ -23,14 +23,27 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip xz-utils
 
-    - name: 下载 LLVM 22.1.7 编译器
+    - name: 编译器缓存
+      id: cache-llvm
+      uses: actions/cache@v4
+      with:
+        # 直接缓存作者脚本指定的家目录下工具链路径
+        path: ~/build_toolchain/llvm-22.1.8-x86_64
+        key: llvm-22.1.8-linux-x64
+
+    - name: 下载 LLVM 22.1.8 编译器
+      if: steps.cache-llvm.outputs.cache-hit != 'true'
       run: |
-        mkdir -p ${{ github.workspace }}/clang-llvm
-        cd ${{ github.workspace }}/clang-llvm
-        # 使用你指定的官方 22.1.7 Linux-X64 编译器直链
-        wget https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.7/LLVM-22.1.7-Linux-X64.tar.xz
-        tar -xf LLVM-22.1.7-Linux-X64.tar.xz --strip-components=1
-        rm LLVM-22.1.7-Linux-X64.tar.xz
+        # 完美迎合作者脚本要求的硬编码路径建立文件夹
+        mkdir -p ~/build_toolchain/llvm-22.1.8-x86_64
+        cd ~/build_toolchain/llvm-22.1.8-x86_64
+        
+        # 使用你指定的 22.1.8 官方新直链
+        wget https://github.com/llvm/llvm-project/releases/download/llvmorg-22.1.8/LLVM-22.1.8-Linux-X64.tar.xz
+        
+        # 解压并剥离掉压缩包自带的顶层目录名，使其完全平铺到当前目录下
+        tar -xf LLVM-22.1.8-Linux-X64.tar.xz --strip-components=1
+        rm LLVM-22.1.8-Linux-X64.tar.xz
 
     - name: 检出源码 (Melt Kernel bouquet)
       run: |
@@ -89,18 +102,13 @@ jobs:
       run: |
         cd $GITHUB_WORKSPACE/sm8450
         
-        # 1. 配置全局环境变量，将你的 LLVM 注入系统的 PATH 中
-        export ARCH=arm64
-        export SUBARCH=arm64
-        export PATH="${{ github.workspace }}/clang-llvm/bin:$PATH"
-        
-        # 2. 补全软链接，防止高通原厂驱动脚本调用裸命令报错
-        ln -sf ${{ github.workspace }}/clang-llvm/bin/clang ${{ github.workspace }}/clang-llvm/bin/aarch64-linux-gnu-clang
-        
-        # 3. 注入你的 Re:Kernel 编译版本变量
+        # 1. 注入你指定的 Re:Kernel 编译版本变量
         export REKERNEL_X_VERSION="v9.2-BuiltIn"
         
-        # 4. 赋予执行权限，并直接调用作者的统一入口构建脚本
+        # 2. 补全软链接到作者要求的 bin 下，防止高通原厂驱动调用裸 aarch64 交叉编译器命令报错
+        ln -sf ~/build_toolchain/llvm-22.1.8-x86_64/bin/clang ~/build_toolchain/llvm-22.1.8-x86_64/bin/aarch64-linux-gnu-clang
+        
+        # 3. 赋予执行权限，直接调用作者的统一入口构建脚本
         chmod +x build_bouquet.sh
         ./build_bouquet.sh
 
@@ -108,8 +116,6 @@ jobs:
       uses: actions/upload-artifact@v4
       with:
         name: Melt-Marble-${{ matrix.ksu_status }}-Artifacts
-        # 脚本跑完后，它会自动把打包好的 AnyKernel3 压缩包放在源码根目录或者 out 目录下
-        # 这里使用通配符捕获所有编译出的 zip 包和内核镜像
         path: |
           sm8450/*.zip
           sm8450/out/arch/arm64/boot/Image
