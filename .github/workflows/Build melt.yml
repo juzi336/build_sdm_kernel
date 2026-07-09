@@ -75,30 +75,30 @@ jobs:
         ./patches.sh
         echo "Re:Kernel 基础补丁集成完成"
 
-    - name: 集成 Re:Kernel LKM 源码 (寄生内建版)
+    - name: 集成 Re:Kernel LKM 源码 (同目录寄生内建版)
       run: |
         cd $GITHUB_WORKSPACE
         git clone -b main https://github.com/myflavor/ReKernel-X.git rekernel_lkm
         
-        # 1. 创建目标目录并释放源码
-        mkdir -p $GITHUB_WORKSPACE/sm8450/drivers/rekernel
-        cp -r rekernel_lkm/LKM-Source/* $GITHUB_WORKSPACE/sm8450/drivers/rekernel/
+        # 1. 直接把 Re:Kernel 源码全部丢进 drivers/android/ 目录下，和 binder.c 放在同一层结构中
+        mkdir -p $GITHUB_WORKSPACE/sm8450/drivers/android/rekernel
+        cp -r rekernel_lkm/LKM-Source/* $GITHUB_WORKSPACE/sm8450/drivers/android/rekernel/[span_0](start_span)[span_0](end_span)
         rm -rf rekernel_lkm
         
-        # 2. 绕开复杂的子 Makefile 链接网络，直接强行追加到核心的 drivers/Makefile 末尾
-        # 这样能让链接器强制把它们当作系统原生驱动直接打包进 vmlinux 核心，解决 undefined symbol
-        cd $GITHUB_WORKSPACE/sm8450/drivers
+        # 2. 强行追加到必定会被链接的核心 drivers/android/Makefile 中
+        # 让它们作为同一个链接集整体打包，消灭 undefined symbol 报错
+        cd $GITHUB_WORKSPACE/sm8450/drivers/android
         echo "obj-y += rekernel/rkx.o rekernel/rkx_genl.o rekernel/rkx_netuid.o rekernel/rkx_frozen.o rekernel/rkx_binder.o rekernel/rkx_signal.o rekernel/rkx_netfilter.o rekernel/rkx_binder_kp.o" >> Makefile
         
-        # 3. 通过安全的双反斜杠转义写入版本号，防止编译时宏为空
+        # 3. 注入版本号宏
         echo "ccflags-y += -DRKX_VERSION=\\\"v9.2-BuiltIn\\\"" >> Makefile
-        echo "Re:Kernel 寄生模式挂载完成"
+        echo "Re:Kernel Android同目录寄生模式挂载完成"
 
     - name: 调用作者脚本编译并打包内核
       run: |
         cd $GITHUB_WORKSPACE/sm8450
         
-        # 配置高通全套原生工具链所需软链接
+        # 配置高通工具链软链接
         ln -sf ~/build_toolchain/llvm-22.1.8-x86_64/bin/clang ~/build_toolchain/llvm-22.1.8-x86_64/bin/aarch64-linux-gnu-clang
         
         chmod +x build_bouquet.sh
