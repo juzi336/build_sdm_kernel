@@ -1,0 +1,65 @@
+name: Compile SM8550 GKI Kernel (Fuxi - AnyKernel3)
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build-kernel:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: 释放磁盘空间
+        uses: easimon/maximize-build-space@v8
+        with:
+          root-reserve-mb: 8192
+          swap-size-mb: 4096
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-postgresql: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+
+      - name: 检出仓库
+        uses: actions/checkout@v4
+
+      - name: 安装依赖
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3 git curl repo bazel-bootstrap zip
+
+      - name: 配置 Repo 工具
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod +x ~/bin/repo
+          echo "$HOME/bin" >> $GITHUB_PATH
+
+      - name: 同步 GKI 5.15 源码
+        run: |
+          mkdir -p android-kernel && cd android-kernel
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+          repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15
+          repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+
+      - name: 编译内核 (Kleaf Dist Target)
+        run: |
+          cd android-kernel
+          tools/bazel run //common:kernel_aarch64_dist -- --destdir=$PWD/out/dist
+
+      - name: 打包 AnyKernel3
+        run: |
+          git clone --depth=1 https://github.com/osm0sis/AnyKernel3 -b master AnyKernel3
+          sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
+          sed -i 's!BLOCK=.*!BLOCK=auto;!g' AnyKernel3/anykernel.sh
+          sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
+          
+          cp android-kernel/out/dist/Image AnyKernel3/
+          
+          cd AnyKernel3
+          zip -r ../fuxi-gki-kernel.zip ./*
+
+      - name: 上传 AnyKernel3 刷机包
+        uses: actions/upload-artifact@v4
+        with:
+          name: fuxi-gki-kernel-zip
+          path: fuxi-gki-kernel.zip
