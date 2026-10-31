@@ -1,4 +1,4 @@
-name: Compile SM8550 GKI Kernel (Fuxi - Custom Workflow)
+name: Compile SM8550 GKI Kernel (Fuxi - Final Version)
 
 on:
   workflow_dispatch:
@@ -13,12 +13,12 @@ jobs:
       with:
           swap-size-gb: 16
 
-    - name: 准备环境
+    - name: 准备基础系统依赖
       run: |
         sudo apt-get update
-        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev clang lld llvm python3 zip curl repo
+        sudo apt-get install -y git bc build-essential flex bison libssl-dev libelf-dev python3 zip curl
 
-    - name: 配置 Repo 工具
+    - name: 配置最新 Repo 工具
       run: |
         mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
@@ -33,10 +33,11 @@ jobs:
         repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15
         repo sync -c -j$(nproc) --no-tags --no-clone-bundle
 
-    - name: 编译内核 (Kleaf Bazel)
+    - name: 编译内核 (Kleaf Bazel with Stamp)
       run: |
         cd android-kernel
-        tools/bazel run //common:kernel_aarch64_dist -- --destdir=$PWD/out/dist
+        # 使用 --config=stamp 修复版本号及时间戳
+        tools/bazel run --config=stamp //common:kernel_aarch64_dist -- --destdir=$PWD/out/dist
 
     - name: 打包 AnyKernel3
       run: |
