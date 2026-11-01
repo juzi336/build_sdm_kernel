@@ -14,7 +14,7 @@ jobs:
     - name: 准备 SWAP
       uses: pierotofy/set-swap-space@master
       with:
-          swap-size-gb: 16
+        swap-size-gb: 16
 
     - name: 准备基础系统依赖
       run: |
@@ -28,13 +28,14 @@ jobs:
         chmod +x ~/bin/repo
         echo "$HOME/bin" >> $GITHUB_PATH
 
-    - name: 同步 GKI 5.15 源码
+    - name: 同步 GKI 5.15 源码并设置版本号
       run: |
         mkdir -p android-kernel && cd android-kernel
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
         repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15
         repo sync -c -j$(nproc) --no-clone-bundle
+        echo "-ab20100722" > common/localversion_ab
 
     - name: 编译内核 (Kleaf Bazel with Stamp)
       run: |
@@ -44,14 +45,8 @@ jobs:
     - name: 打包 AnyKernel3
       run: |
         git clone --depth=1 https://github.com/osm0sis/AnyKernel3
-        
-        # 使用你仓库 patches 目录下的 anykernel.sh 覆盖
         cp $GITHUB_WORKSPACE/patches/anykernel.sh AnyKernel3/anykernel.sh
-        
-        # 复制编译出的内核镜像
         cp android-kernel/out/dist/Image AnyKernel3/
-        
-        # 打包成刷机 ZIP
         cd AnyKernel3
         zip -r ../fuxi-kernel-release.zip ./*
 
