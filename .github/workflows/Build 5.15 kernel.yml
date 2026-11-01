@@ -28,19 +28,34 @@ jobs:
         chmod +x ~/bin/repo
         echo "$HOME/bin" >> $GITHUB_PATH
 
-    - name: 同步 GKI 5.15 源码并设置版本号
+    - name: 同步 GKI 5.15 源码
       run: |
         mkdir -p android-kernel && cd android-kernel
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
         repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15
         repo sync -c -j$(nproc) --no-clone-bundle
-        echo "-ab20100722" > common/localversion_ab
+
+    - name: 设置 -ab 版本后缀
+      env:
+        AB_NUM: "20100722"
+      run: |
+        cd android-kernel/common
+        if ! grep -qx 'echo "\$res"' scripts/setlocalversion; then
+          echo "setlocalversion 末尾不是预期格式，内容如下："
+          cat scripts/setlocalversion
+          exit 1
+        fi
+        sed -i "s|^echo \"\$res\"\$|echo \"\$res-ab${AB_NUM}\"|" scripts/setlocalversion
+        git add scripts/setlocalversion
+        git commit -q -m "setlocalversion: append -ab${AB_NUM}"
+        tail -5 scripts/setlocalversion
 
     - name: 编译内核 (Kleaf Bazel with Stamp)
       run: |
         cd android-kernel
         tools/bazel run --config=stamp //common:kernel_aarch64_dist -- --destdir=$PWD/out/dist
+        strings -a out/dist/Image | grep -m1 "Linux version 5"
 
     - name: 打包 AnyKernel3
       run: |
@@ -55,3 +70,4 @@ jobs:
       with:
         name: fuxi-kernel-ZIP
         path: ${{ github.workspace }}/fuxi-kernel-release.zip
+如果「设置 -ab 版本后缀」步骤报错，把日志贴给我。
