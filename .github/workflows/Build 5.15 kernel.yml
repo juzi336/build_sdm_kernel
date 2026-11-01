@@ -70,4 +70,3 @@ jobs:
       with:
         name: fuxi-kernel-ZIP
         path: ${{ github.workspace }}/fuxi-kernel-release.zip
-如果「设置 -ab 版本后缀」步骤报错，把日志贴给我。
