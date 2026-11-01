@@ -46,7 +46,7 @@ jobs:
           cat scripts/setlocalversion
           exit 1
         fi
-        sed -i "s|^echo \"\$res\"\$|echo \"\$res-ab${AB_NUM}\"|" scripts/setlocalversion
+        sed -i "s|^echo \"\$res\"\$|echo \"\${res%-ab${AB_NUM}}-ab${AB_NUM}\"|" scripts/setlocalversion
         git add scripts/setlocalversion
         git commit -q -m "setlocalversion: append -ab${AB_NUM}"
         tail -5 scripts/setlocalversion
