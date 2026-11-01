@@ -1,4 +1,4 @@
-name: Compile SM8550 GKI Kernel (Fuxi - Final Version)
+name: Compile SM8550 GKI Kernel (Fuxi)
 
 on:
   workflow_dispatch:
@@ -8,6 +8,9 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
+    - name: 检出当前仓库代码
+      uses: actions/checkout@v4
+
     - name: 准备 SWAP
       uses: pierotofy/set-swap-space@master
       with:
@@ -31,24 +34,24 @@ jobs:
         git config --global user.name "GitHub Actions"
         git config --global user.email "actions@github.com"
         repo init -u https://android.googlesource.com/kernel/manifest -b common-android13-5.15
-        repo sync -c -j$(nproc) --no-tags --no-clone-bundle
+        repo sync -c -j$(nproc) --no-clone-bundle
 
     - name: 编译内核 (Kleaf Bazel with Stamp)
       run: |
         cd android-kernel
-        # 使用 --config=stamp 修复版本号及时间戳
         tools/bazel run --config=stamp //common:kernel_aarch64_dist -- --destdir=$PWD/out/dist
 
     - name: 打包 AnyKernel3
       run: |
-        cd $GITHUB_WORKSPACE
         git clone --depth=1 https://github.com/osm0sis/AnyKernel3
-        sed -i 's/do.devicecheck=1/do.devicecheck=0/g' AnyKernel3/anykernel.sh
-        sed -i 's!BLOCK=.*!BLOCK=auto;!g' AnyKernel3/anykernel.sh
-        sed -i 's/IS_SLOT_DEVICE=0;/IS_SLOT_DEVICE=auto;/g' AnyKernel3/anykernel.sh
         
+        # 使用你仓库 patches 目录下的 anykernel.sh 覆盖
+        cp $GITHUB_WORKSPACE/patches/anykernel.sh AnyKernel3/anykernel.sh
+        
+        # 复制编译出的内核镜像
         cp android-kernel/out/dist/Image AnyKernel3/
         
+        # 打包成刷机 ZIP
         cd AnyKernel3
         zip -r ../fuxi-kernel-release.zip ./*
 
